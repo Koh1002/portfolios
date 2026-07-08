@@ -1,18 +1,20 @@
+"use client";
+
 import Link from "next/link";
-import { getPortfolio } from "@/lib/portfolio";
+import { usePortfolio } from "@/lib/use-portfolio";
 import { summarizeDividends } from "@/lib/dividends";
 import { exMonthsFor } from "@/data/stock-universe";
 import { yen, pct } from "@/lib/format";
-import { Card, EmptyState, MarketSourceNotice, PageHeader, StatCard } from "@/components/ui";
+import { Card, EmptyState, Loading, MarketSourceNotice, PageHeader, StatCard } from "@/components/ui";
 import { DividendBars } from "@/components/charts";
 import { DIVIDEND_TAX_RATE } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
-
 const MONTH_LABEL = ["1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月"];
 
-export default async function DividendsPage() {
-  const portfolio = await getPortfolio();
+export default function DividendsPage() {
+  const { ready, portfolio, marketDateLabel } = usePortfolio();
+  if (!ready) return <Loading />;
+
   const summary = summarizeDividends(
     portfolio.stockHoldings.map((h) => ({
       ticker: h.ticker!,
@@ -39,7 +41,7 @@ export default async function DividendsPage() {
         title="配当カレンダー"
         description="保有株の年間予想配当と月別の受取スケジュール（受取月 = 権利確定月 + 約3ヶ月で推計）"
       />
-      <MarketSourceNotice sources={portfolio.marketSources} />
+      <MarketSourceNotice sources={portfolio.marketSources} dateLabel={marketDateLabel} />
 
       {summary.perStock.length === 0 ? (
         <EmptyState title="配当のある保有株がありません">
@@ -83,7 +85,7 @@ export default async function DividendsPage() {
                   {summary.perStock.map((s) => (
                     <tr key={s.ticker} className="border-b border-[var(--grid)] last:border-0">
                       <td className="py-2">
-                        <Link href={`/stocks/${s.ticker}`} className="font-medium hover:underline">{s.name}</Link>
+                        <Link href={`/stocks/detail?t=${s.ticker}`} className="font-medium hover:underline">{s.name}</Link>
                         <span className="ml-1.5 text-xs text-[var(--ink-muted)]">{s.ticker}</span>
                       </td>
                       <td className="py-2 text-right tabular">{yen(s.annualGross)}</td>

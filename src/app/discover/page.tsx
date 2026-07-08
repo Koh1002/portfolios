@@ -1,50 +1,47 @@
+"use client";
+
 import Link from "next/link";
+import { Suspense, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { SECTORS, STOCK_UNIVERSE, type Sector } from "@/data/stock-universe";
-import { getFundamentals, getQuote } from "@/lib/yahoo";
+import { usePortfolio } from "@/lib/use-portfolio";
 import { computeValuation } from "@/lib/valuation";
 import { scoreStock } from "@/lib/scoring";
-import { getDcfParams } from "@/lib/settings";
-import { getPortfolio } from "@/lib/portfolio";
 import { yen, pct } from "@/lib/format";
-import { Card, EmptyState, MarketSourceNotice, PageHeader, ScoreBar, Stars, VerdictBadge } from "@/components/ui";
+import { Card, EmptyState, Loading, MarketSourceNotice, PageHeader, ScoreBar, Stars, VerdictBadge } from "@/components/ui";
 import type { MarketSource } from "@/lib/types";
 
-export const dynamic = "force-dynamic";
-
-export default async function DiscoverPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ sector?: string }>;
-}) {
-  const { sector } = await searchParams;
+function Discover() {
+  const searchParams = useSearchParams();
+  const sector = searchParams.get("sector");
   const activeSector = SECTORS.includes(sector as Sector) ? (sector as Sector) : null;
 
-  const portfolio = await getPortfolio();
-  const heldTickers = new Set(portfolio.stockHoldings.map((h) => h.ticker));
-  const dcfParams = getDcfParams();
+  const { ready, portfolio, data, marketDateLabel, getQuote, getFundamentals } = usePortfolio();
 
-  const universe = STOCK_UNIVERSE.filter((s) => !heldTickers.has(s.code)).filter(
-    (s) => !activeSector || s.sector === activeSector,
-  );
-
-  const sources = new Set<MarketSource>();
-  const scored = (
-    await Promise.all(
-      universe.map(async (stock) => {
-        const [quoteRes, fundRes] = await Promise.all([
-          getQuote(stock.code, stock.name),
-          getFundamentals(stock.code, stock.name),
-        ]);
+  const scored = useMemo(() => {
+    if (!ready) return { rows: [], sources: [] as MarketSource[] };
+    const heldTickers = new Set(portfolio.stockHoldings.map((h) => h.ticker));
+    const universe = STOCK_UNIVERSE.filter((s) => !heldTickers.has(s.code)).filter(
+      (s) => !activeSector || s.sector === activeSector,
+    );
+    const sources = new Set<MarketSource>();
+    const rows = universe
+      .map((stock) => {
+        const quoteRes = getQuote(stock.code, stock.name);
+        const fundRes = getFundamentals(stock.code, stock.name);
         if (!quoteRes.data || !fundRes.data) return null;
         sources.add(quoteRes.source);
-        const valuation = computeValuation(quoteRes.data, fundRes.data, dcfParams);
+        const valuation = computeValuation(quoteRes.data, fundRes.data, data.settings.dcfParams);
         const score = scoreStock(stock, quoteRes.data, fundRes.data, valuation);
         return { stock, quote: quoteRes.data, valuation, score };
-      }),
-    )
-  ).filter((x): x is NonNullable<typeof x> => x != null);
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null)
+      .sort((a, b) => b.score.total - a.score.total);
+    return { rows, sources: Array.from(sources) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, portfolio, activeSector, data.settings.dcfParams]);
 
-  scored.sort((a, b) => b.score.total - a.score.total);
+  if (!ready) return <Loading />;
 
   const tabCls = (active: boolean) =>
     `rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
@@ -59,7 +56,7 @@ export default async function DiscoverPage({
         title="銘柄をさがす"
         description="未保有の注目銘柄を「株価分析 × 配当 × 株主優待」の3観点でスコアリングして提案します（保有中の銘柄は除外）"
       />
-      <MarketSourceNotice sources={Array.from(sources)} />
+      <MarketSourceNotice sources={scored.sources} dateLabel={marketDateLabel} />
 
       <div className="mb-5 flex flex-wrap gap-2">
         <Link href="/discover" className={tabCls(activeSector == null)}>
@@ -72,17 +69,17 @@ export default async function DiscoverPage({
         ))}
       </div>
 
-      {scored.length === 0 ? (
+      {scored.rows.length === 0 ? (
         <EmptyState title="表示できる銘柄がありません" />
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          {scored.map(({ stock, quote, valuation, score }, rank) => (
+          {scored.rows.map(({ stock, quote, valuation, score }, rank) => (
             <Card key={stock.code}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-[var(--ink-muted)]">#{rank + 1}</span>
-                    <Link href={`/stocks/${stock.code}`} className="text-base font-bold hover:underline">
+                    <Link href={`/stocks/detail?t=${stock.code}`} className="text-base font-bold hover:underline">
                       {stock.name}
                     </Link>
                     <span className="text-xs text-[var(--ink-muted)]">{stock.code}</span>
@@ -133,5 +130,13 @@ export default async function DiscoverPage({
         本提案は情報提供であり、投資勧誘ではありません。
       </p>
     </div>
+  );
+}
+
+export default function DiscoverPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <Discover />
+    </Suspense>
   );
 }

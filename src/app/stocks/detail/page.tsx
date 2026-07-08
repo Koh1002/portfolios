@@ -1,24 +1,39 @@
+"use client";
+
 import Link from "next/link";
-import { getFundamentals, getQuote } from "@/lib/yahoo";
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { usePortfolio } from "@/lib/use-portfolio";
 import { computeValuation } from "@/lib/valuation";
-import { getDcfParams } from "@/lib/settings";
 import { yen, yenCompact, pct, num } from "@/lib/format";
-import { Card, PageHeader, SourceBadge, StatCard, VerdictBadge } from "@/components/ui";
+import { Card, Loading, PageHeader, SourceBadge, StatCard, VerdictBadge } from "@/components/ui";
 import { AnnualChart, QuarterlyChart } from "@/components/charts";
 import { findUniverseStock } from "@/data/stock-universe";
 
-export const dynamic = "force-dynamic";
+function StockDetail() {
+  const searchParams = useSearchParams();
+  const ticker = (searchParams.get("t") ?? "").trim();
+  const { ready, data, marketDateLabel, getQuote, getFundamentals } = usePortfolio();
 
-export default async function StockDetailPage({ params }: { params: Promise<{ ticker: string }> }) {
-  const { ticker } = await params;
+  if (!ready) return <Loading />;
+
+  if (!ticker) {
+    return (
+      <div>
+        <PageHeader title="銘柄分析" />
+        <p className="text-sm text-[var(--ink-secondary)]">
+          銘柄が指定されていません。<Link href="/stocks" className="text-[var(--series-1)] underline">保有株分析</Link> から選択してください。
+        </p>
+      </div>
+    );
+  }
+
   const uni = findUniverseStock(ticker);
-  const [quoteRes, fundRes] = await Promise.all([
-    getQuote(ticker, uni?.name),
-    getFundamentals(ticker, uni?.name),
-  ]);
+  const quoteRes = getQuote(ticker, uni?.name);
+  const fundRes = getFundamentals(ticker, uni?.name);
   const quote = quoteRes.data;
   const fund = fundRes.data;
-  const dcfParams = getDcfParams();
+  const dcfParams = data.settings.dcfParams;
   const valuation = quote && fund ? computeValuation(quote, fund, dcfParams) : null;
 
   if (!quote) {
@@ -49,6 +64,9 @@ export default async function StockDetailPage({ params }: { params: Promise<{ ti
           </div>
         }
       />
+      {marketDateLabel && quoteRes.source === "live" && (
+        <p className="-mt-3 mb-4 text-xs text-[var(--ink-muted)]">📡 {marketDateLabel} 時点のデータ</p>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
@@ -96,7 +114,6 @@ export default async function StockDetailPage({ params }: { params: Promise<{ ti
         />
       </div>
 
-      {/* 業績チャート */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card title={`四半期業績（売上高・純利益）${fundRes.source === "mock" ? "※サンプル" : ""}`}>
           {quarterly.length > 0 ? (
@@ -114,13 +131,11 @@ export default async function StockDetailPage({ params }: { params: Promise<{ ti
         </Card>
       </div>
 
-      {/* 理論株価の計算過程 */}
       <Card title="理論株価の計算過程" className="mt-4">
         {!valuation ? (
           <p className="text-sm text-[var(--ink-muted)]">財務データ不足のため計算できません。</p>
         ) : (
           <div className="grid gap-5 lg:grid-cols-3">
-            {/* DCF */}
             <div className="rounded-lg bg-[var(--page)] p-4">
               <h3 className="text-sm font-semibold">
                 ① DCF法{valuation.dcf && <span className="ml-2 text-xs font-normal text-[var(--ink-muted)]">重み {(valuation.weights.dcf * 100).toFixed(0)}%</span>}
@@ -167,7 +182,6 @@ export default async function StockDetailPage({ params }: { params: Promise<{ ti
               )}
             </div>
 
-            {/* PER */}
             <div className="rounded-lg bg-[var(--page)] p-4">
               <h3 className="text-sm font-semibold">
                 ② PER法{valuation.per && <span className="ml-2 text-xs font-normal text-[var(--ink-muted)]">重み {(valuation.weights.per * 100).toFixed(0)}%</span>}
@@ -183,7 +197,6 @@ export default async function StockDetailPage({ params }: { params: Promise<{ ti
               )}
             </div>
 
-            {/* DDM */}
             <div className="rounded-lg bg-[var(--page)] p-4">
               <h3 className="text-sm font-semibold">
                 ③ 配当割引モデル{valuation.ddm && <span className="ml-2 text-xs font-normal text-[var(--ink-muted)]">重み {(valuation.weights.ddm * 100).toFixed(0)}%</span>}
@@ -207,5 +220,13 @@ export default async function StockDetailPage({ params }: { params: Promise<{ ti
         </p>
       </Card>
     </div>
+  );
+}
+
+export default function StockDetailPage() {
+  return (
+    <Suspense fallback={<Loading />}>
+      <StockDetail />
+    </Suspense>
   );
 }

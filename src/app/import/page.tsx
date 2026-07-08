@@ -1,12 +1,12 @@
-import { asc } from "drizzle-orm";
-import { db, accounts } from "@/db";
-import { Card, PageHeader } from "@/components/ui";
+"use client";
+
+import { usePortfolio } from "@/lib/use-portfolio";
+import { Card, Loading, PageHeader } from "@/components/ui";
 import { ImportClient } from "@/components/import-client";
 
-export const dynamic = "force-dynamic";
-
 export default function ImportPage() {
-  const accountRows = db.select().from(accounts).orderBy(asc(accounts.id)).all();
+  const { ready, portfolio } = usePortfolio();
+  if (!ready) return <Loading />;
 
   return (
     <div>
@@ -36,11 +36,11 @@ export default function ImportPage() {
         </Card>
       </div>
 
-      <ImportClient accounts={accountRows.map((a) => ({ id: a.id, name: a.name }))} />
+      <ImportClient accounts={portfolio.accounts.map((a) => ({ id: a.id, name: a.name }))} />
 
       <p className="mt-5 text-xs text-[var(--ink-muted)]">
         💡 保有資産CSVを取り込む前に、口座・資産ページで取り込み先口座（例:「SBI証券」）を作成してください。
-        文字コード（Shift_JIS / UTF-8）は自動判定されます。
+        文字コード（Shift_JIS / UTF-8）は自動判定されます。ファイルはブラウザ内で処理され、外部送信されません。
       </p>
     </div>
   );

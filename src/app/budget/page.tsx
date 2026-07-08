@@ -1,16 +1,17 @@
-import { asc } from "drizzle-orm";
-import { db, transactions } from "@/db";
-import { yen } from "@/lib/format";
+"use client";
+
 import Link from "next/link";
-import { Card, EmptyState, PageHeader, StatCard } from "@/components/ui";
+import { usePortfolioData } from "@/lib/use-portfolio";
+import { yen } from "@/lib/format";
+import { Card, EmptyState, Loading, PageHeader, StatCard } from "@/components/ui";
 import { BudgetBars } from "@/components/charts";
 
-export const dynamic = "force-dynamic";
-
 export default function BudgetPage() {
-  const rows = db.select().from(transactions).orderBy(asc(transactions.date)).all();
+  const { data, ready } = usePortfolioData();
+  if (!ready) return <Loading />;
 
-  // 月別集計
+  const rows = data.transactions;
+
   const byMonth = new Map<string, { income: number; expense: number }>();
   for (const r of rows) {
     const key = r.date.slice(0, 7);
@@ -23,7 +24,6 @@ export default function BudgetPage() {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .slice(-12);
 
-  // 直近月のカテゴリ内訳
   const latestMonth = months.length > 0 ? months[months.length - 1][0] : null;
   const catMap = new Map<string, number>();
   if (latestMonth) {

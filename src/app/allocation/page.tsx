@@ -1,21 +1,21 @@
-import { getPortfolio } from "@/lib/portfolio";
+"use client";
+
+import { usePortfolio } from "@/lib/use-portfolio";
 import { findUniverseStock } from "@/data/stock-universe";
 import { ASSET_CLASS_LABEL, NISA_LABEL, type AssetClass, type NisaType } from "@/lib/types";
 import { yen, pct } from "@/lib/format";
-import { Card, EmptyState, MarketSourceNotice, PageHeader } from "@/components/ui";
+import { Card, EmptyState, Loading, MarketSourceNotice, PageHeader } from "@/components/ui";
 import { BreakdownPie } from "@/components/charts";
 
-export const dynamic = "force-dynamic";
-
-export default async function AllocationPage() {
-  const portfolio = await getPortfolio();
+export default function AllocationPage() {
+  const { ready, portfolio, marketDateLabel } = usePortfolio();
+  if (!ready) return <Loading />;
 
   const classData = Object.entries(portfolio.byClass)
     .filter(([, v]) => v > 0)
     .sort((a, b) => b[1] - a[1])
     .map(([k, v]) => ({ key: k, name: ASSET_CLASS_LABEL[k as AssetClass], value: Math.round(v) }));
 
-  // セクター別（株式のみ、ユニバース情報から推定）
   const sectorMap = new Map<string, number>();
   for (const h of portfolio.stockHoldings) {
     const sector = (h.ticker && findUniverseStock(h.ticker)?.sector) || "その他";
@@ -25,7 +25,6 @@ export default async function AllocationPage() {
     .sort((a, b) => b[1] - a[1])
     .map(([name, value]) => ({ name, value: Math.round(value) }));
 
-  // NISA区分別
   const nisaMap = new Map<string, number>();
   for (const h of portfolio.holdings) {
     const label = NISA_LABEL[h.nisa as NisaType] ?? h.nisa;
@@ -35,7 +34,6 @@ export default async function AllocationPage() {
     .sort((a, b) => b[1] - a[1])
     .map(([name, value]) => ({ name, value: Math.round(value) }));
 
-  // 集中リスク警告
   const warnings: string[] = [];
   const stockTotal = portfolio.stockHoldings.reduce((s, h) => s + h.value, 0);
   for (const h of portfolio.stockHoldings) {
@@ -66,7 +64,7 @@ export default async function AllocationPage() {
         title="アロケーション分析"
         description="資産クラス・セクター・口座区分ごとの分散状況と集中リスクのチェック"
       />
-      <MarketSourceNotice sources={portfolio.marketSources} />
+      <MarketSourceNotice sources={portfolio.marketSources} dateLabel={marketDateLabel} />
 
       {portfolio.total <= 0 ? (
         <EmptyState title="資産が登録されていません" />

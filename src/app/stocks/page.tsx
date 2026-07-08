@@ -1,25 +1,22 @@
+"use client";
+
 import Link from "next/link";
-import { getPortfolio } from "@/lib/portfolio";
-import { getFundamentals } from "@/lib/yahoo";
+import { usePortfolio } from "@/lib/use-portfolio";
 import { computeValuation } from "@/lib/valuation";
-import { getDcfParams } from "@/lib/settings";
 import { yen, pct } from "@/lib/format";
-import { Card, EmptyState, GainText, MarketSourceNotice, PageHeader, VerdictBadge } from "@/components/ui";
+import { Card, EmptyState, GainText, Loading, MarketSourceNotice, PageHeader, VerdictBadge } from "@/components/ui";
 
-export const dynamic = "force-dynamic";
+export default function StocksPage() {
+  const { ready, portfolio, data, marketDateLabel, getFundamentals } = usePortfolio();
+  if (!ready) return <Loading />;
 
-export default async function StocksPage() {
-  const portfolio = await getPortfolio();
-  const dcfParams = getDcfParams();
-
-  const rows = await Promise.all(
-    portfolio.stockHoldings.map(async (h) => {
-      const fund = h.ticker ? await getFundamentals(h.ticker, h.name) : null;
-      const valuation = h.quote && fund?.data ? computeValuation(h.quote, fund.data, dcfParams) : null;
-      return { holding: h, valuation, fundSource: fund?.source ?? "none" };
-    }),
-  );
-  rows.sort((a, b) => (a.valuation?.ratio ?? 99) - (b.valuation?.ratio ?? 99));
+  const rows = portfolio.stockHoldings
+    .map((h) => {
+      const fund = h.ticker ? getFundamentals(h.ticker, h.name) : null;
+      const valuation = h.quote && fund?.data ? computeValuation(h.quote, fund.data, data.settings.dcfParams) : null;
+      return { holding: h, valuation };
+    })
+    .sort((a, b) => (a.valuation?.ratio ?? 99) - (b.valuation?.ratio ?? 99));
 
   return (
     <div>
@@ -27,7 +24,7 @@ export default async function StocksPage() {
         title="保有株分析"
         description="DCF法・PER法・配当割引モデルの3手法による理論株価と割安/割高判定"
       />
-      <MarketSourceNotice sources={portfolio.marketSources} />
+      <MarketSourceNotice sources={portfolio.marketSources} dateLabel={marketDateLabel} />
 
       {rows.length === 0 ? (
         <EmptyState title="ティッカー付きの保有株がありません">
@@ -54,7 +51,7 @@ export default async function StocksPage() {
                 {rows.map(({ holding: h, valuation }) => (
                   <tr key={h.id} className="border-b border-[var(--grid)] last:border-0 hover:bg-[var(--page)]">
                     <td className="py-2.5">
-                      <Link href={`/stocks/${h.ticker}`} className="font-medium hover:underline">
+                      <Link href={`/stocks/detail?t=${h.ticker}`} className="font-medium hover:underline">
                         {h.name}
                       </Link>
                       <span className="ml-1.5 text-xs text-[var(--ink-muted)]">{h.ticker}</span>
@@ -81,7 +78,7 @@ export default async function StocksPage() {
                       <GainText value={h.gain} pct={h.gainPct} />
                     </td>
                     <td className="py-2.5 pl-3 text-right">
-                      <Link href={`/stocks/${h.ticker}`} className="text-xs text-[var(--series-1)] hover:underline">
+                      <Link href={`/stocks/detail?t=${h.ticker}`} className="text-xs text-[var(--series-1)] hover:underline">
                         詳細 →
                       </Link>
                     </td>

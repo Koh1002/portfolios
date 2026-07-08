@@ -46,7 +46,7 @@ export function VerdictBadge({ verdict }: { verdict: Verdict | null }) {
 }
 
 const SOURCE_LABEL: Record<MarketSource, { label: string; cls: string }> = {
-  live: { label: "リアルタイム", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  live: { label: "毎日更新", cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
   cache: { label: "キャッシュ", cls: "bg-slate-100 text-slate-600 border-slate-200" },
   mock: { label: "サンプルデータ", cls: "bg-amber-50 text-amber-700 border-amber-200" },
   none: { label: "取得不可", cls: "bg-slate-100 text-slate-500 border-slate-200" },
@@ -57,13 +57,32 @@ export function SourceBadge({ source }: { source: MarketSource }) {
   return <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] ${s.cls}`}>株価: {s.label}</span>;
 }
 
-export function MarketSourceNotice({ sources }: { sources: MarketSource[] }) {
-  if (!sources.includes("mock")) return null;
+export function MarketSourceNotice({
+  sources,
+  dateLabel,
+}: {
+  sources: MarketSource[];
+  dateLabel?: string | null;
+}) {
+  if (sources.includes("mock")) {
+    return (
+      <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+        ⚠️ 一部の銘柄は株価データ未取得のため<strong>サンプル値</strong>で表示しています。
+        毎日の自動更新（GitHub Actions）後、または <code>scripts/extra-tickers.json</code> への銘柄追加で実データに切り替わります。
+      </div>
+    );
+  }
+  if (dateLabel) {
+    return (
+      <p className="mb-4 text-xs text-[var(--ink-muted)]">📡 株価・財務データ: {dateLabel} 時点（毎日自動更新）</p>
+    );
+  }
+  return null;
+}
+
+export function Loading() {
   return (
-    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
-      ⚠️ Yahoo Finance に接続できないため、一部の株価・財務データは<strong>サンプル値</strong>で表示しています。
-      ネットワーク接続後に再読み込みすると実データに切り替わります。
-    </div>
+    <div className="py-24 text-center text-sm text-[var(--ink-muted)]">読み込み中…</div>
   );
 }
 
