@@ -6,7 +6,6 @@
 // 各社のCSVは列名が揺れるため、ヘッダー行のキーワードマッチで列を特定する。
 
 import Papa from "papaparse";
-import iconv from "iconv-lite";
 import type { AssetClass, NisaType } from "../types";
 
 export type SnapshotRow = { date: string; category: AssetClass; amount: number };
@@ -35,9 +34,15 @@ export type ParsedCsv =
   | { kind: "unknown"; headers: string[] };
 
 // ── 文字コード判定（UTF-8 / Shift_JIS） ──
-export function decodeCsvBuffer(buf: Buffer): string {
-  const utf8 = buf.toString("utf8");
-  const sjis = iconv.decode(buf, "shift_jis");
+// TextDecoder はブラウザ・Node の両方で利用可能（GitHub Pages 静的版でも動く）
+export function decodeCsvBuffer(buf: Uint8Array): string {
+  const utf8 = new TextDecoder("utf-8").decode(buf);
+  let sjis: string;
+  try {
+    sjis = new TextDecoder("shift_jis").decode(buf);
+  } catch {
+    sjis = utf8; // shift_jis 非対応環境（通常はない）
+  }
   const score = (s: string) => {
     let jp = 0;
     for (const ch of s.slice(0, 4000)) {
@@ -278,7 +283,7 @@ export function parseHoldingsCsv(text: string): HoldingRow[] {
 }
 
 // ── エントリポイント ──
-export function parseCsv(buf: Buffer): ParsedCsv {
+export function parseCsv(buf: Uint8Array): ParsedCsv {
   const text = decodeCsvBuffer(buf);
   const kind = detectFormat(text);
   switch (kind) {

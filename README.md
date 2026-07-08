@@ -3,13 +3,28 @@
 マネーフォワードME・SBI証券・楽天証券で管理している資産を一元管理し、
 「資産を増やす」ための分析機能を備えたパーソナル資産管理アプリです。
 
+**GitHub Pages で動く静的Webアプリ**です。資産データはブラウザの localStorage にのみ保存され、
+サーバーには一切送信されません（サイトURL自体は公開ですが、あなたのデータは他人からは見えません）。
+
+## 🚀 GitHub Pages で使う
+
+公開URL: **https://koh1002.github.io/portfolios/**
+
+初回セットアップ（リポジトリ管理者が一度だけ）:
+
+1. リポジトリの **Settings → Pages → Build and deployment → Source** を **GitHub Actions** にする
+2. main にpushすると `Deploy to GitHub Pages` ワークフローが自動でビルド・デプロイ
+3. `Update market data` ワークフローが平日16:30(JST)に株価を自動更新（Actionsタブから手動実行も可）
+
+> ⚠️ データは端末のブラウザ内に保存されるため、**設定ページのJSONエクスポートで定期的にバックアップ**してください（機種変更・ブラウザのデータ削除に備えて）。
+
 ## 主な機能
 
 | ページ | 機能 |
 |---|---|
 | 🏠 ダッシュボード | 総資産・前月比・評価損益・資産推移グラフ・内訳円グラフ・各種アラート |
 | 🏦 口座・資産 | 口座と保有資産のCRUD（株式は株価から自動評価）・スナップショット記録 |
-| 📥 CSVインポート | マネーフォワードME（資産推移/家計簿/保有資産）・SBI証券・楽天証券のCSV取り込み（Shift_JIS自動判定） |
+| 📥 CSVインポート | マネーフォワードME（資産推移/家計簿/保有資産）・SBI証券・楽天証券のCSV取り込み（Shift_JIS自動判定・ブラウザ内処理） |
 | 📊 保有株分析 | **DCF法・PER法・配当割引モデルの3手法で理論株価を計算**し、割安/割高を5段階判定。四半期・通期業績チャート、計算過程の全表示 |
 | 🔍 銘柄をさがす | 半導体・AI・小売・製造メーカー・商社・サービス業の未保有銘柄を「**株価分析×配当×株主優待**」の3観点でスコアリングして提案 |
 | 💰 配当カレンダー | 月別の配当受取予定・年間予想配当（税引後）・YOC |
@@ -17,22 +32,14 @@
 | 📈 資産シミュレーション | 積立×複利の将来資産予測（3シナリオ）・FIRE達成時期の試算（4%ルール） |
 | 🧩 アロケーション分析 | 資産クラス/セクター/NISA区分別の分散状況と集中リスク警告 |
 | 🧾 収支 | マネーフォワードME家計簿CSVによる月別収支・カテゴリ内訳 |
+| ⚙️ 設定 | DCFパラメータ調整・**JSONバックアップ/復元**・サンプルデータ・全データ削除 |
 
-## セットアップ
+## はじめかた
 
-```bash
-npm install
-npm run dev        # http://localhost:3000
-```
+1. サイトを開く → 「**サンプルデータを読み込んで試す**」で動作を確認
+2. 自分のデータに切り替え: 設定ページで全データ削除 → 「口座・資産」で口座を作成 → 手入力 or 「CSVインポート」
 
-初回はデータが空です。次のいずれかで始めてください。
-
-- **サンプルデータで試す**: `npm run seed` → 口座3件・保有資産8件・資産推移13ヶ月分などが入ります
-- **自分のデータを入れる**: 「口座・資産」ページで口座を作成 → 手入力 or 「CSVインポート」
-
-データはすべてローカルの SQLite (`data/portfolio.db`) に保存され、外部送信されません。
-
-## CSVの取り込み方
+### CSVの取り込み方
 
 | ソース | 取得方法 | 反映先 |
 |---|---|---|
@@ -41,13 +48,14 @@ npm run dev        # http://localhost:3000
 | SBI証券 保有証券 | 口座管理 → 保有証券 → CSVダウンロード | 保有資産 |
 | 楽天証券 保有商品 | マイメニュー → 保有商品一覧 → CSV保存 | 保有資産 |
 
-文字コード（Shift_JIS/UTF-8）は自動判定。保有資産CSVはセクション見出しからNISA区分・資産種別を自動判別します。
+文字コード（Shift_JIS/UTF-8）は自動判定。CSVはブラウザ内で処理され、外部送信されません。
 
-## 株価・財務データ
+## 株価・財務データの仕組み
 
-- [yahoo-finance2](https://github.com/gadicc/yahoo-finance2) 経由で Yahoo Finance から取得（APIキー不要・日本株は `7203.T` 形式）
-- SQLiteにキャッシュ（株価15分・財務24時間）
-- **オフライン/接続不可時は自動でサンプルデータにフォールバック**し、UIに「サンプルデータ」と明示されます（`MARKET_DATA=mock` で強制可能）
+- GitHub Actions（`.github/workflows/market-data.yml`）が平日16:30(JST)に [yahoo-finance2](https://github.com/gadicc/yahoo-finance2) で取得し、`public/market/market.json` を更新 → サイトが自動再デプロイ
+- 取得対象: 銘柄提案ユニバース約60銘柄 + **`scripts/extra-tickers.json` に追記した銘柄**
+  - 保有銘柄がユニバース外の場合はこのファイルに証券コードを追加してください（未登録銘柄はサンプル値表示になります）
+- 株価は1日1回更新です（リアルタイムではありません）
 
 ## 理論株価の計算方法
 
@@ -68,17 +76,23 @@ npm run dev        # http://localhost:3000
 ## 開発
 
 ```bash
-npm test           # ユニットテスト（理論株価・CSVパーサー・配当・リバランス等 41件）
-npm run build      # プロダクションビルド
-npm run lint
+npm install
+npm run dev                    # ローカル開発 http://localhost:3000
+npm test                       # ユニットテスト47件（理論株価・CSV・store・配当・リバランス等）
+npm run fetch-market -- --mock # サンプル値で market.json を生成（オフライン用）
+npm run fetch-market           # Yahoo Finance から market.json を生成
+NEXT_PUBLIC_BASE_PATH=/portfolios npm run build  # Pages用の静的ビルド（out/）
 ```
 
 主要モジュール:
 
+- `src/lib/store.ts` — localStorage データストア（バックアップ含む）
+- `src/lib/compute-portfolio.ts` — ポートフォリオ集計（純粋関数）
+- `src/lib/market-client.ts` — market.json の読込とフォールバック
 - `src/lib/valuation.ts` — 理論株価エンジン（純粋関数）
 - `src/lib/scoring.ts` — 銘柄提案スコアリング
 - `src/lib/csv/parse.ts` — CSVパーサー（MF/SBI/楽天）
-- `src/lib/yahoo.ts` — 市場データ取得（キャッシュ+フォールバック）
 - `src/data/stock-universe.ts` — 提案対象銘柄・株主優待データ
+- `scripts/fetch-market-data.ts` — 市場データ取得（GitHub Actionsから実行）
 
 > ⚠️ 本アプリの理論株価・銘柄提案・シミュレーションは参考情報であり、投資勧誘ではありません。投資判断はご自身の責任で行ってください。

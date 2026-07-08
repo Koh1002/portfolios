@@ -1,4 +1,15 @@
-import { getPortfolio } from "@/lib/portfolio";
+"use client";
+
+import type { FormEvent } from "react";
+import { usePortfolio } from "@/lib/use-portfolio";
+import {
+  addAccount,
+  addHolding,
+  deleteAccount,
+  deleteHolding,
+  updateHolding,
+  upsertSnapshots,
+} from "@/lib/store";
 import {
   ACCOUNT_TYPE_LABEL,
   ASSET_CLASS_LABEL,
@@ -7,11 +18,8 @@ import {
   type AssetClass,
   type NisaType,
 } from "@/lib/types";
-import { yen, num } from "@/lib/format";
-import { Card, EmptyState, GainText, MarketSourceNotice, PageHeader } from "@/components/ui";
-import { createAccount, createHolding, deleteAccount, deleteHolding, snapshotNow, updateHolding } from "./actions";
-
-export const dynamic = "force-dynamic";
+import { yen, num, today } from "@/lib/format";
+import { Card, EmptyState, GainText, Loading, MarketSourceNotice, PageHeader } from "@/components/ui";
 
 const inputCls =
   "rounded-lg border border-[var(--axis)] bg-white px-2.5 py-1.5 text-sm focus:border-[var(--series-1)] focus:outline-none";
@@ -19,8 +27,68 @@ const btnPrimary =
   "rounded-lg bg-[var(--series-1)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90";
 const btnGhost = "rounded-lg border border-[var(--axis)] px-3 py-1.5 text-sm hover:bg-[var(--page)]";
 
-export default async function AccountsPage() {
-  const portfolio = await getPortfolio();
+function fd(e: FormEvent<HTMLFormElement>): FormData {
+  e.preventDefault();
+  return new FormData(e.currentTarget);
+}
+
+function numOrNull(f: FormData, key: string): number | null {
+  const v = String(f.get(key) ?? "").trim().replace(/,/g, "");
+  if (v === "") return null;
+  const n = Number(v);
+  return isFinite(n) ? n : null;
+}
+
+export default function AccountsPage() {
+  const { ready, portfolio, marketDateLabel } = usePortfolio();
+  if (!ready) return <Loading />;
+
+  const onAddAccount = (e: FormEvent<HTMLFormElement>) => {
+    const f = fd(e);
+    const name = String(f.get("name") ?? "").trim();
+    if (!name) return;
+    addAccount({
+      name,
+      institution: String(f.get("institution") ?? "").trim(),
+      type: String(f.get("type") ?? "other"),
+    });
+    (e.target as HTMLFormElement).reset();
+  };
+
+  const onAddHolding = (accountId: number) => (e: FormEvent<HTMLFormElement>) => {
+    const f = fd(e);
+    const name = String(f.get("name") ?? "").trim();
+    if (!name) return;
+    addHolding({
+      accountId,
+      assetType: String(f.get("assetType") ?? "stock") as AssetClass,
+      ticker: String(f.get("ticker") ?? "").trim() || null,
+      name,
+      quantity: numOrNull(f, "quantity") ?? 0,
+      avgCost: numOrNull(f, "avgCost"),
+      manualValue: numOrNull(f, "manualValue"),
+      nisa: String(f.get("nisa") ?? "none") as NisaType,
+    });
+    (e.target as HTMLFormElement).reset();
+  };
+
+  const onUpdateHolding = (id: number) => (e: FormEvent<HTMLFormElement>) => {
+    const f = fd(e);
+    updateHolding(id, {
+      quantity: numOrNull(f, "quantity") ?? 0,
+      avgCost: numOrNull(f, "avgCost"),
+      manualValue: numOrNull(f, "manualValue"),
+      nisa: String(f.get("nisa") ?? "none") as NisaType,
+    });
+  };
+
+  const onSnapshot = () => {
+    const date = today();
+    const rows = Object.entries(portfolio.byClass)
+      .filter(([, amount]) => amount != null && amount !== 0)
+      .map(([category, amount]) => ({ date, category, amount: amount! }));
+    upsertSnapshots(rows, "auto");
+  };
 
   return (
     <div>
@@ -28,18 +96,15 @@ export default async function AccountsPage() {
         title="口座・資産"
         description="金融機関口座と保有資産の登録・編集"
         action={
-          <form action={snapshotNow}>
-            <button className={btnGhost} title="現在の評価額を資産推移グラフ用に記録します">
-              📸 スナップショット記録
-            </button>
-          </form>
+          <button onClick={onSnapshot} className={btnGhost} title="現在の評価額を資産推移グラフ用に記録します">
+            📸 スナップショット記録
+          </button>
         }
       />
-      <MarketSourceNotice sources={portfolio.marketSources} />
+      <MarketSourceNotice sources={portfolio.marketSources} dateLabel={marketDateLabel} />
 
-      {/* 口座追加 */}
       <Card title="口座を追加" className="mb-5">
-        <form action={createAccount} className="flex flex-wrap items-end gap-3">
+        <form onSubmit={onAddAccount} className="flex flex-wrap items-end gap-3">
           <label className="text-xs text-[var(--ink-secondary)]">
             口座名
             <input name="name" required placeholder="例: SBI証券" className={`${inputCls} mt-1 block w-44`} />
@@ -81,10 +146,14 @@ export default async function AccountsPage() {
                     </span>
                     <span className="flex items-center gap-3">
                       <span className="tabular text-base font-bold text-[var(--ink)]">{yen(total)}</span>
-                      <form action={deleteAccount}>
-                        <input type="hidden" name="id" value={account.id} />
-                        <button className="text-xs text-[var(--bad)] hover:underline">口座を削除</button>
-                      </form>
+                      <button
+                        onClick={() => {
+                          if (confirm(`口座「${account.name}」とその保有資産を削除しますか？`)) deleteAccount(account.id);
+                        }}
+                        className="text-xs text-[var(--bad)] hover:underline"
+                      >
+                        口座を削除
+                      </button>
                     </span>
                   </span>
                 }
@@ -129,8 +198,7 @@ export default async function AccountsPage() {
                               <details className="relative inline-block text-left">
                                 <summary className="cursor-pointer text-xs text-[var(--series-1)] hover:underline">編集</summary>
                                 <div className="absolute right-0 z-10 mt-1 w-72 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-lg">
-                                  <form action={updateHolding} className="space-y-2">
-                                    <input type="hidden" name="id" value={h.id} />
+                                  <form onSubmit={onUpdateHolding(h.id)} className="space-y-2">
                                     <label className="block text-xs text-[var(--ink-secondary)]">
                                       数量
                                       <input name="quantity" defaultValue={h.quantity} className={`${inputCls} mt-1 block w-full`} />
@@ -153,10 +221,12 @@ export default async function AccountsPage() {
                                     </label>
                                     <button className={`${btnPrimary} w-full`}>保存</button>
                                   </form>
-                                  <form action={deleteHolding} className="mt-2">
-                                    <input type="hidden" name="id" value={h.id} />
-                                    <button className="w-full text-center text-xs text-[var(--bad)] hover:underline">この資産を削除</button>
-                                  </form>
+                                  <button
+                                    onClick={() => deleteHolding(h.id)}
+                                    className="mt-2 w-full text-center text-xs text-[var(--bad)] hover:underline"
+                                  >
+                                    この資産を削除
+                                  </button>
                                 </div>
                               </details>
                             </td>
@@ -169,8 +239,7 @@ export default async function AccountsPage() {
 
                 <details className="mt-3">
                   <summary className="cursor-pointer text-sm text-[var(--series-1)] hover:underline">＋ 資産を追加</summary>
-                  <form action={createHolding} className="mt-3 flex flex-wrap items-end gap-3 rounded-lg bg-[var(--page)] p-3">
-                    <input type="hidden" name="accountId" value={account.id} />
+                  <form onSubmit={onAddHolding(account.id)} className="mt-3 flex flex-wrap items-end gap-3 rounded-lg bg-[var(--page)] p-3">
                     <label className="text-xs text-[var(--ink-secondary)]">
                       種別
                       <select name="assetType" className={`${inputCls} mt-1 block w-28`}>
@@ -219,6 +288,7 @@ export default async function AccountsPage() {
       <p className="mt-5 text-xs text-[var(--ink-muted)]">
         💡 現金・預金は「種別: 現金・預金」で数量に金額を入れるか、評価額欄に金額を入力してください。
         投資信託は評価額欄に現在の評価額を入力すると総資産に反映されます（証券コード付きの株式は株価から自動評価）。
+        データはこの端末のブラウザ内にのみ保存されます。
       </p>
     </div>
   );

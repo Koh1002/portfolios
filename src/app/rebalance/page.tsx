@@ -1,18 +1,31 @@
-import { getPortfolio } from "@/lib/portfolio";
-import { getTargetAllocation } from "@/lib/settings";
+"use client";
+
+import type { FormEvent } from "react";
+import { usePortfolio } from "@/lib/use-portfolio";
+import { saveSettings } from "@/lib/store";
 import { computeRebalance, DRIFT_THRESHOLD_PCT } from "@/lib/rebalance";
-import { ASSET_CLASSES, ASSET_CLASS_LABEL } from "@/lib/types";
+import { ASSET_CLASSES, ASSET_CLASS_LABEL, type TargetAllocation } from "@/lib/types";
 import { yen, pct } from "@/lib/format";
-import { Card, EmptyState, MarketSourceNotice, PageHeader } from "@/components/ui";
+import { Card, EmptyState, Loading, MarketSourceNotice, PageHeader } from "@/components/ui";
 import { AllocationCompareBars } from "@/components/charts";
-import { saveTargetAllocation } from "./actions";
 
-export const dynamic = "force-dynamic";
+export default function RebalancePage() {
+  const { ready, portfolio, data, marketDateLabel } = usePortfolio();
+  if (!ready) return <Loading />;
 
-export default async function RebalancePage() {
-  const portfolio = await getPortfolio();
-  const target = getTargetAllocation();
+  const target = data.settings.targetAllocation;
   const result = computeRebalance(portfolio.byClass, target);
+
+  const onSave = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const next: TargetAllocation = {};
+    for (const c of ASSET_CLASSES) {
+      const v = Number(String(f.get(c) ?? "").trim());
+      if (isFinite(v) && v > 0) next[c] = v;
+    }
+    saveSettings({ targetAllocation: next });
+  };
 
   const inputCls =
     "rounded-lg border border-[var(--axis)] bg-white px-2.5 py-1.5 text-sm text-right tabular focus:border-[var(--series-1)] focus:outline-none";
@@ -24,7 +37,7 @@ export default async function RebalancePage() {
         title="リバランス提案"
         description={`目標の資産配分と現状の乖離を確認し、必要な売買金額を提案します（乖離±${DRIFT_THRESHOLD_PCT}pt超で要リバランス）`}
       />
-      <MarketSourceNotice sources={portfolio.marketSources} />
+      <MarketSourceNotice sources={portfolio.marketSources} dateLabel={marketDateLabel} />
 
       {portfolio.total <= 0 ? (
         <EmptyState title="資産が登録されていません" />
@@ -95,7 +108,7 @@ export default async function RebalancePage() {
           </div>
 
           <Card title="目標アセットアロケーションの設定（%）" className="mt-4">
-            <form action={saveTargetAllocation} className="flex flex-wrap items-end gap-3">
+            <form onSubmit={onSave} className="flex flex-wrap items-end gap-3">
               {ASSET_CLASSES.map((c) => (
                 <label key={c} className="text-xs text-[var(--ink-secondary)]">
                   {ASSET_CLASS_LABEL[c]}

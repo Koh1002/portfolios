@@ -1,40 +1,41 @@
+"use client";
+
 import Link from "next/link";
-import { getPortfolio, getSnapshotSeries } from "@/lib/portfolio";
-import { getFundamentals } from "@/lib/yahoo";
+import { useMemo } from "react";
+import { usePortfolio } from "@/lib/use-portfolio";
 import { computeValuation } from "@/lib/valuation";
-import { getDcfParams, getTargetAllocation } from "@/lib/settings";
 import { computeRebalance } from "@/lib/rebalance";
 import { summarizeDividends } from "@/lib/dividends";
 import { exMonthsFor } from "@/data/stock-universe";
+import { buildSampleData } from "@/data/sample-data";
+import { replaceAllData } from "@/lib/store";
 import { ASSET_CLASS_LABEL, type AssetClass } from "@/lib/types";
 import { yen, yenCompact, pct } from "@/lib/format";
-import { Card, EmptyState, MarketSourceNotice, PageHeader, StatCard, VerdictBadge } from "@/components/ui";
+import { Card, EmptyState, Loading, MarketSourceNotice, PageHeader, StatCard, VerdictBadge } from "@/components/ui";
 import { BreakdownPie, TrendChart } from "@/components/charts";
 
-export const dynamic = "force-dynamic";
+export default function DashboardPage() {
+  const { ready, portfolio, series, data, marketDateLabel, getFundamentals } = usePortfolio();
 
-export default async function DashboardPage() {
-  const portfolio = await getPortfolio();
-  const series = getSnapshotSeries();
+  const judged = useMemo(() => {
+    return portfolio.stockHoldings
+      .map((h) => {
+        if (!h.quote || !h.ticker) return null;
+        const fund = getFundamentals(h.ticker, h.name);
+        if (!fund.data) return null;
+        return { holding: h, valuation: computeValuation(h.quote, fund.data, data.settings.dcfParams) };
+      })
+      .filter((v): v is NonNullable<typeof v> => v != null && v.valuation.verdict != null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolio, data.settings.dcfParams]);
 
-  // 保有株の割安/割高サマリー
-  const dcfParams = getDcfParams();
-  const valuations = await Promise.all(
-    portfolio.stockHoldings.map(async (h) => {
-      if (!h.quote || !h.ticker) return null;
-      const fund = await getFundamentals(h.ticker, h.name);
-      if (!fund.data) return null;
-      return { holding: h, valuation: computeValuation(h.quote, fund.data, dcfParams) };
-    }),
-  );
-  const judged = valuations.filter((v): v is NonNullable<typeof v> => v != null && v.valuation.verdict != null);
+  if (!ready) return <Loading />;
+
   const undervalued = judged.filter((v) => v.valuation.verdict === "割安" || v.valuation.verdict === "やや割安");
   const overvalued = judged.filter((v) => v.valuation.verdict === "割高" || v.valuation.verdict === "やや割高");
 
-  // リバランス乖離
-  const rebalance = computeRebalance(portfolio.byClass, getTargetAllocation());
+  const rebalance = computeRebalance(portfolio.byClass, data.settings.targetAllocation);
 
-  // 配当（当月・年間）
   const divSummary = summarizeDividends(
     portfolio.stockHoldings.map((h) => ({
       ticker: h.ticker!,
@@ -72,13 +73,23 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="ダッシュボード" description="資産全体のサマリー" />
-      <MarketSourceNotice sources={portfolio.marketSources} />
+      <PageHeader title="ダッシュボード" description="資産全体のサマリー（データはこの端末のブラウザ内にのみ保存されます）" />
+      <MarketSourceNotice sources={portfolio.marketSources} dateLabel={marketDateLabel} />
 
       {!hasData ? (
         <EmptyState title="まだ資産が登録されていません">
-          <Link href="/accounts" className="text-[var(--series-1)] underline">口座・資産の登録</Link> または{" "}
-          <Link href="/import" className="text-[var(--series-1)] underline">CSVインポート</Link> から始めましょう
+          <div className="space-y-3">
+            <p>
+              <Link href="/accounts" className="text-[var(--series-1)] underline">口座・資産の登録</Link> または{" "}
+              <Link href="/import" className="text-[var(--series-1)] underline">CSVインポート</Link> から始めましょう
+            </p>
+            <button
+              onClick={() => replaceAllData(buildSampleData())}
+              className="rounded-lg bg-[var(--series-1)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              サンプルデータを読み込んで試す
+            </button>
+          </div>
         </EmptyState>
       ) : (
         <>
@@ -103,7 +114,6 @@ export default async function DashboardPage() {
             />
           </div>
 
-          {/* アラート */}
           {(rebalance.needsRebalance || undervalued.length > 0 || overvalued.length > 0 || thisMonthDiv.gross > 0) && (
             <Card title="アラート・お知らせ" className="mt-4">
               <ul className="space-y-1.5 text-sm">
@@ -157,13 +167,13 @@ export default async function DashboardPage() {
               ) : (
                 <table className="w-full text-sm">
                   <tbody>
-                    {judged
+                    {[...judged]
                       .sort((a, b) => (a.valuation.ratio ?? 1) - (b.valuation.ratio ?? 1))
                       .slice(0, 6)
                       .map(({ holding, valuation }) => (
                         <tr key={holding.id} className="border-b border-[var(--grid)] last:border-0">
                           <td className="py-2">
-                            <Link href={`/stocks/${holding.ticker}`} className="font-medium hover:underline">
+                            <Link href={`/stocks/detail?t=${holding.ticker}`} className="font-medium hover:underline">
                               {holding.name}
                             </Link>
                             <span className="ml-1.5 text-xs text-[var(--ink-muted)]">{holding.ticker}</span>

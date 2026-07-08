@@ -1,11 +1,12 @@
-import { getPortfolio } from "@/lib/portfolio";
-import { PageHeader } from "@/components/ui";
+"use client";
+
+import { usePortfolio } from "@/lib/use-portfolio";
+import { Loading, PageHeader } from "@/components/ui";
 import { SimulationClient } from "@/components/simulation-client";
 
-export const dynamic = "force-dynamic";
-
-export default async function SimulationPage() {
-  const portfolio = await getPortfolio();
+export default function SimulationPage() {
+  const { ready, portfolio } = usePortfolio();
+  if (!ready) return <Loading />;
 
   return (
     <div>
