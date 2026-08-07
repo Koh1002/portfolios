@@ -11,7 +11,8 @@ import {
   bundleDateLabel,
   type MarketBundle,
 } from "./market-client";
-import { computePortfolio, snapshotSeries, type Portfolio } from "./compute-portfolio";
+import { computePortfolio, type Portfolio } from "./compute-portfolio";
+import { deriveAssetSeries, type SeriesPoint } from "./derive-series";
 import type { Fundamentals, MarketResult, QuoteData } from "./types";
 
 const INITIAL: PortfolioData = emptyData();
@@ -50,7 +51,8 @@ export type PortfolioState = {
   ready: boolean;
   data: PortfolioData;
   portfolio: Portfolio;
-  series: { date: string; total: number; byClass: Record<string, number> }[];
+  // 資産推移: 実測スナップショット + 入出金明細からの推計（derived: true）
+  series: SeriesPoint[];
   bundle: MarketBundle | null;
   marketDateLabel: string | null; // 市場データの取得日時（表示用）
   getQuote: (ticker: string, name?: string) => MarketResult<QuoteData>;
@@ -66,7 +68,7 @@ export function usePortfolio(): PortfolioState {
     () => computePortfolio(data, (t, n) => quoteFromBundle(bundle, t, n)),
     [data, bundle],
   );
-  const series = useMemo(() => snapshotSeries(data), [data]);
+  const series = useMemo(() => deriveAssetSeries(data.snapshots, data.transactions), [data]);
 
   return {
     ready: ready && bundleState !== undefined,
