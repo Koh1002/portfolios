@@ -14,12 +14,18 @@ export default function ImportPage() {
         title="CSVインポート"
         description="マネーフォワードME・SBI証券・楽天証券のCSVから資産データを取り込みます"
       />
+      <div className="mb-5 rounded-lg border border-[#c8dcf5] bg-[#e8f0fb] px-4 py-3 text-sm text-[#1c5cab]">
+        <strong>おすすめの運用（マネーフォワードME無料版）</strong>: ① 口座・資産ページに現在の資産を登録して
+        「📸 スナップショット記録」で基準日の断面を1回記録 → ② MFの<strong>月ごとの入出金明細CSV</strong>を
+        毎月ここで積み上げてインポート（複数月まとめてOK・過去分も遡れます）。
+        入出金から資産推移が自動で推計されます。
+      </div>
       <div className="mb-5 grid gap-4 lg:grid-cols-3">
         <Card title="マネーフォワードME">
           <ul className="list-disc space-y-1 pl-4 text-xs leading-relaxed text-[var(--ink-secondary)]">
-            <li>「資産推移」ページ → CSVダウンロード → 資産推移グラフに反映</li>
-            <li>「家計簿（収入・支出詳細）」→ CSVダウンロード → 収支ページに反映</li>
-            <li>資産の保有明細CSV → 保有資産として取り込み</li>
+            <li>「家計簿」→ 月を選択 → CSVダウンロード（無料版は月単位の入出金明細のみ）</li>
+            <li>毎月積み上げてインポート。同じ月を再取込すると置き換えられ重複しません</li>
+            <li>プレミアムの資産推移CSVにも対応（取り込むと実測点になります）</li>
           </ul>
         </Card>
         <Card title="SBI証券">

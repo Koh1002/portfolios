@@ -50,6 +50,10 @@ export default function DashboardPage() {
   const currentMonth = new Date().getMonth() + 1;
   const thisMonthDiv = divSummary.monthly[currentMonth - 1];
 
+  // 最新の推計点（入出金反映後の現在資産の目安）
+  const last = series[series.length - 1];
+  const latestDerived = last?.derived ? last : null;
+
   // 前月比（スナップショットから約1ヶ月前を探す）
   let momChange: number | null = null;
   if (series.length >= 2) {
@@ -94,7 +98,15 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <StatCard label="総資産" value={yen(portfolio.total)} sub={`${portfolio.holdings.length}件の資産`} />
+            <StatCard
+              label="総資産（登録資産ベース）"
+              value={yen(portfolio.total)}
+              sub={
+                latestDerived && Math.abs(latestDerived.total - portfolio.total) > portfolio.total * 0.005
+                  ? `入出金反映後の推計: ${yen(latestDerived.total)}（${latestDerived.date}時点）`
+                  : `${portfolio.holdings.length}件の資産`
+              }
+            />
             <StatCard
               label="前月比"
               value={momChange != null ? yen(momChange, { signed: true }) : "−"}
@@ -145,13 +157,13 @@ export default function DashboardPage() {
           )}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Card title="資産推移">
+            <Card title="資産推移（実測 + 入出金からの推計）">
               {series.length >= 2 ? (
-                <TrendChart data={series.map((s) => ({ date: s.date, total: Math.round(s.total) }))} />
+                <TrendChart data={series.map((s) => ({ date: s.date, total: Math.round(s.total), derived: s.derived }))} />
               ) : (
                 <p className="py-10 text-center text-sm text-[var(--ink-muted)]">
-                  スナップショットが2件以上たまると推移グラフが表示されます。<br />
-                  CSVインポートまたは口座ページの「スナップショット記録」で蓄積できます。
+                  ① 口座ページで「スナップショット記録」（基準日の資産断面）を1回登録し、<br />
+                  ② マネーフォワードMEの月次入出金CSVをインポートすると、推移が自動推計されます。
                 </p>
               )}
             </Card>
