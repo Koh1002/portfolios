@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePortfolioData } from "@/lib/use-portfolio";
+import { isInvestmentTransfer, transactionCoverage } from "@/lib/derive-series";
 import { yen } from "@/lib/format";
 import { Card, EmptyState, Loading, PageHeader, StatCard } from "@/components/ui";
 import { BudgetBars } from "@/components/charts";
@@ -36,6 +37,14 @@ export default function BudgetPage() {
   const categories = Array.from(catMap.entries()).sort((a, b) => b[1] - a[1]);
   const latest = latestMonth ? byMonth.get(latestMonth)! : null;
 
+  // 取込カバレッジと直近月の投資振替（積立）額
+  const coverage = transactionCoverage(rows);
+  const latestInvest = latestMonth
+    ? rows
+        .filter((r) => r.date.startsWith(latestMonth) && r.amount < 0 && isInvestmentTransfer(r.category))
+        .reduce((s, r) => s + -r.amount, 0)
+    : 0;
+
   return (
     <div>
       <PageHeader
@@ -49,6 +58,30 @@ export default function BudgetPage() {
         </EmptyState>
       ) : (
         <>
+          <div
+            className={`mb-4 rounded-lg border px-4 py-3 text-sm ${
+              coverage.missing.length > 0
+                ? "border-amber-300 bg-amber-50 text-amber-800"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            }`}
+          >
+            📥 取込済みの入出金明細: <strong>{coverage.months[0]?.replace("-", "/")}〜{coverage.months[coverage.months.length - 1]?.replace("-", "/")}</strong>
+            （{coverage.months.length}ヶ月分）
+            {coverage.missing.length > 0 ? (
+              <>
+                {" "}／ ⚠️ 未取込の月: <strong>{coverage.missing.map((m) => m.replace("-", "/")).join("・")}</strong>
+                — 歯抜けがあると資産推移の推計が不正確になります。該当月のCSVを追加インポートしてください。
+              </>
+            ) : (
+              " ／ 歯抜けなし ✅"
+            )}
+            {latestInvest > 0 && (
+              <>
+                <br />💹 直近月の積立（貯金・投資カテゴリ）: <strong>{yen(latestInvest)}</strong>
+                — 資産推移では現金→投資信託への振替として扱われます（総資産は減りません）
+              </>
+            )}
+          </div>
           {latest && (
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               <StatCard label={`${latestMonth!.replace("-", "年")}月の収入`} value={yen(latest.income)} tone="good" />
