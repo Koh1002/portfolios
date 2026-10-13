@@ -82,12 +82,13 @@ export default function AccountsPage() {
     });
   };
 
-  const onSnapshot = () => {
-    const date = today();
+  const onSnapshot = (e: FormEvent<HTMLFormElement>) => {
+    const f = fd(e);
+    const date = String(f.get("date") ?? "").trim() || today();
     const rows = Object.entries(portfolio.byClass)
       .filter(([, amount]) => amount != null && amount !== 0)
       .map(([category, amount]) => ({ date, category, amount: amount! }));
-    upsertSnapshots(rows, "auto");
+    upsertSnapshots(rows, "manual");
   };
 
   return (
@@ -96,9 +97,18 @@ export default function AccountsPage() {
         title="口座・資産"
         description="金融機関口座と保有資産の登録・編集"
         action={
-          <button onClick={onSnapshot} className={btnGhost} title="現在の評価額を資産推移グラフ用に記録します">
-            📸 スナップショット記録
-          </button>
+          <form onSubmit={onSnapshot} className="flex items-end gap-2">
+            <label className="text-xs text-[var(--ink-secondary)]">
+              基準日
+              <input type="date" name="date" defaultValue={today()} className={`${inputCls} mt-1 block`} />
+            </label>
+            <button
+              className={btnGhost}
+              title="現在登録されている資産の評価額を、この基準日時点の断面として記録します（入出金からの推移推計の基準になります）"
+            >
+              📸 スナップショット記録
+            </button>
+          </form>
         }
       />
       <MarketSourceNotice sources={portfolio.marketSources} dateLabel={marketDateLabel} />

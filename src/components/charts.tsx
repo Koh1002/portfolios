@@ -5,7 +5,6 @@
 
 import {
   Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -69,23 +68,61 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-// ── 資産推移（エリアチャート） ──
-export function TrendChart({ data }: { data: { date: string; total: number }[] }) {
+// ── 資産推移（エリアチャート、実測=点マーカー / 推計=点線） ──
+export function TrendChart({
+  data,
+}: {
+  data: { date: string; total: number; derived?: boolean }[];
+}) {
+  const rows = data.map((d) => ({
+    ...d,
+    actual: d.derived ? null : d.total, // 実測点のみ
+  }));
+  const hasDerived = data.some((d) => d.derived);
+  const nameMap: Record<string, string> = { total: hasDerived ? "総資産（点線=推計）" : "総資産", actual: "実測" };
   return (
     <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
+      <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
         <defs>
           <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={SERIES.blue} stopOpacity={0.25} />
+            <stop offset="0%" stopColor={SERIES.blue} stopOpacity={0.2} />
             <stop offset="100%" stopColor={SERIES.blue} stopOpacity={0.02} />
           </linearGradient>
         </defs>
         <CartesianGrid stroke={GRID} vertical={false} />
         <XAxis dataKey="date" tick={{ fontSize: 11, fill: MUTED }} stroke={AXIS} tickLine={false} minTickGap={40} />
         <YAxis tickFormatter={yenTick} tick={{ fontSize: 11, fill: MUTED }} stroke={AXIS} tickLine={false} width={52} />
-        <Tooltip formatter={(v) => [yenFull(Number(v)), "総資産"]} contentStyle={tooltipStyle} />
-        <Area type="monotone" dataKey="total" stroke={SERIES.blue} strokeWidth={2} fill="url(#trendFill)" />
-      </AreaChart>
+        <Tooltip
+          formatter={(v, name) => [yenFull(Number(v)), name === "actual" ? "実測" : "総資産"]}
+          labelFormatter={(label, payload) => {
+            const derived = payload?.[0]?.payload?.derived;
+            return `${label}${derived ? "（入出金からの推計）" : "（実測）"}`;
+          }}
+          contentStyle={tooltipStyle}
+        />
+        {hasDerived && (
+          <Legend iconSize={10} formatter={(v) => <span style={{ fontSize: 12, color: "#52514e" }}>{nameMap[String(v)] ?? v}</span>} />
+        )}
+        <Area
+          type="monotone"
+          dataKey="total"
+          stroke={SERIES.blue}
+          strokeWidth={2}
+          strokeDasharray={hasDerived ? "5 4" : undefined}
+          fill="url(#trendFill)"
+          dot={false}
+        />
+        {hasDerived && (
+          <Line
+            type="monotone"
+            dataKey="actual"
+            stroke={SERIES.blue}
+            strokeWidth={2.5}
+            connectNulls={false}
+            dot={{ r: 4, fill: SERIES.blue, strokeWidth: 2, stroke: "#fcfcfb" }}
+          />
+        )}
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
